@@ -1,0 +1,26 @@
+# build artifacts
+build/
+dist/
+out/
+*.o
+*.so
+*.apk
+*.zip
+
+# proprietary binaries extracted from a personal device (never commit)
+lib/libopenxr_forwardloader_orig.so
+lib/*.so
+
+# logs
+*.log
+*.txt
+
+# toolchains
+tools/zig*/
+tools/ndk*/
+
+# editor / OS
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

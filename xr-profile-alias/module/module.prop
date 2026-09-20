@@ -1,0 +1,6 @@
+id=pico_xr_profile_alias
+name=Pico XR Profile Alias (Steam Frame controllers)
+version=v1.7
+versionCode=6
+author=wzy
+description=Systemless OpenXR loader shim for the Steam Frame build of VRChat on PICO 4. Rewrites the interaction-profile token valve/frame_controller_valve -> a runtime-supported profile and prunes the bindings that profile does not have, so PICO controllers bind again. VRChat APK is never modified and no code is injected into the game. Disable or remove this module to revert completely. Reboot required.

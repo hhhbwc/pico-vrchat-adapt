@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.wzy.picoadapt"
+    android:versionCode="3"
+    android:versionName="1.2">
+
+    <!-- targetSdk 28：允许 Android 12L 用 v1 签名安装（无需 apksigner v2） -->
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="28" />
+
+    <application
+        android:label="Pico VRChat Adapt"
+        android:hasCode="true"
+        android:allowBackup="false">
+
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="Enable controller input for sideloaded VRChat on Pico OS 5.13.7 (hooks Pico OpenXR runtime, APK untouched)" />
+        <meta-data android:name="xposedminversion" android:value="82" />
+        <meta-data
+            android:name="xposedscope"
+            android:value="com.pico.xr.openxr_runtime" />
+    </application>
+</manifest>
