@@ -4,8 +4,11 @@
 #  修改后重启模块（或重启设备）生效。
 # ============================================================
 
-# 目标应用包名（VRChat Steam Frame 版本）
-PKG="com.vrchat.android"
+# 目标应用包名（空格分隔，支持多个）
+# com.vrchat.android   = 一体机原版 VRChat（未改动）
+# com.vrchat.steamframe = Steam Frame 版改名共存包（见 README「与一体机版共存」）
+# 只装其中一版时，删掉另一行即可。
+PKGS="com.vrchat.steamframe com.vrchat.android"
 
 # 伪装成的 Pico OS 版本（5.5 区间，策略最宽松）
 # 部分 Pico 版本的 VR 运行时会读取系统属性来切换“严格/宽松”策略。

@@ -126,6 +126,32 @@ VRChat（自带 libopenxr_loader.so）
 | `discover=` | `0` | `1` 时探测目标 profile 的完整组件字典并打日志（写 `map=` 规则用） |
 | `debug=` | `1` | 逐绑定探测结果日志 |
 
+## 可选：与一体机版 VRChat 共存
+
+一体机版 VRChat 与 Steam Frame 版**包名相同**（都是 `com.vrchat.android`），装一个会覆盖另一个。想让两版共存：**一体机版保持原样不动，把 Steam Frame 版改名重签**即可（反方向同理）。
+
+原理：改 APK 的 `AndroidManifest.xml` 里 `package` 属性 + 两处包名绑定数据（androidx-startup 的 `authorities`、自定义权限 `deveventspermission` 声明与使用）。注意：
+
+- 组件类名**不能跟着改**（类还在原包名的 dex 里），全限定名一律保持 `com.vrchat.android.*`；
+- `<queries>` 里的 `org.khronos.openxr.runtime_broker` 等权威是 OpenXR 运行时发现用的系统标准名，**不要动**；
+- 若 manifest 存在相对组件名（`android:name=".XXX"`），必须展开为原包名全限定名。
+
+手动步骤（apktool ≥ 2.9 + 任意 APK 签名工具，如 uber-apk-signer）：
+
+```bash
+apktool d -s vrchat_steamframe.apk -o work/          # -s 保留 dex 原样
+#   编辑 work/AndroidManifest.xml：package 改为 com.vrchat.steamframe，
+#   authorities 改 com.vrchat.steamframe.androidx-startup，
+#   两处 com.vrchat.android.deveventspermission 改新包名前缀
+apktool b work/ -o mirror_unsigned.apk
+#   zipalign + 签名（任何自选密钥均可，仅自用）
+adb install mirror_signed.apk
+```
+
+共存后两版数据相互独立（独立 UID），各自登录。本仓库的 shim 与属性伪装按 profile token / 系统属性工作，**不依赖包名**，对改名后的包同样生效；`module-sideload/config.sh` 的 `PKGS` 已默认包含两个包名（权限授予用）。
+
+> ⚠️ 重签会破坏原签名，仅限自用互操作研究，请勿分发改签名后的安装包。
+
 ## 常见问题
 
 **为什么仓库里没有 .so 和 .zip？**

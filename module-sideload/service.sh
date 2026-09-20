@@ -29,8 +29,10 @@ android.permission.ACCESS_WIFI_STATE
 android.permission.ACCESS_NETWORK_STATE"
 
 for perm in $PERMS; do
-  out=$(pm grant "$PKG" "$perm" 2>&1)
-  if [ -n "$out" ]; then log "grant $perm -> $out"; fi
+  for PKG in $PKGS; do
+    out=$(pm grant "$PKG" "$perm" 2>&1)
+    if [ -n "$out" ]; then log "grant $PKG $perm -> $out"; fi
+  done
 done
 
 # ---- 2) 让未知来源应用也能作为 VR 应用被识别（best-effort）----
@@ -55,4 +57,4 @@ fi
 # ---- 5) 落盘实际属性，便于排错 ----
 log "--- current pico props ---"
 getprop 2>/dev/null | grep -i pico >> "$LOG" 2>/dev/null
-log "=== service done for $PKG ==="
+log "=== service done for: $PKGS ==="
