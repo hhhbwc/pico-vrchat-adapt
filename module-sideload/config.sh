@@ -16,8 +16,12 @@ SPOOF_OS_VERSION="5.5.0"
 # 是否禁用 OTA 更新（防止夜间自动升级回更封闭版本）
 DISABLE_OTA=1
 
-# 是否尝试禁用 Pico 安全校验器（com.pico.security.verifier）
-DISABLE_VERIFIER=1
+# 是否尝试禁用 Pico 安全校验器（com.pvr.verify）
+# 警告：默认关闭。启用会 pm disable-user com.pvr.verify，而 Virtual Desktop
+# 依赖平台 VerifyApp 有服务响应——校验器被禁后 VD 会超时不可用。
+# VD 需要的不是"放行属性"，而是校验器本身开着。
+# 本模块的 uninstall.sh 会在卸载时自动重新启用校验器。
+DISABLE_VERIFIER=0
 
 # 是否伪装 ro.pvr.internal.version（含 sv5.13.7 标记的版本属性）。
 # 风险较高（运行时会解析此字符串），默认关闭；仅当日志显示运行时按版本拒绝时开启。

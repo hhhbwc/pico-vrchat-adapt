@@ -196,22 +196,22 @@ Magisk → 模块 → 移除 → 重启。systemless 挂载（`system/lib64/libo
 
 ## 关于 `DISABLE_VERIFIER` 与 Virtual Desktop（重要）
 
-`module-sideload` 默认会 `pm disable-user com.pvr.verify`（`DISABLE_VERIFIER=1`），这是**兜底**手段 —— VRChat 的放行主要靠属性伪装 + 权限授予，禁用校验器只是「以防万一」。
+`module-sideload` 的 `DISABLE_VERIFIER` **默认关闭（0）**，即不动 `com.pvr.verify`。VRChat 的放行主要靠属性伪装 + 权限授予，禁用校验器只是「以防万一」的兜底，而它的副作用比收益大：
 
-副作用：部分侧载应用的平台校验（`VerifyApp`）需要这个服务**在线**才有响应。实测 **Virtual Desktop** 在「校验器被禁用 + 放行属性缺失」时会报 `VerifyApp call timed out`（表现为 `Unable to retrieve your computers`）—— 典型发生在**卸载模块之后**，因为 `pm disable-user` 的状态是持久的。
+部分侧载应用的平台校验（`VerifyApp`）需要这个服务**在线**才有响应。实测 **Virtual Desktop** 一旦校验器被禁用就会报 `VerifyApp call timed out`（表现为 `Unable to retrieve your computers`）—— **VD 需要的不是放行属性，恰恰是校验器本身开着**。
 
 三种组合的实测结果：
 
 | 校验器 | 放行属性 | Virtual Desktop | VRChat Steam Frame |
 |---|---|---|---|
 | 开 | 无 | 正常 | 进不了 VR（未装模块时的基线） |
-| 关 | 有（装模块） | 正常 | 正常 |
-| 关 | 无（卸模块后、旧版无 uninstall.sh） | **超时报错** | 进不了 VR |
+| 开 | 有（v1.2 默认） | 正常 | 正常 |
+| 关 | 有 | **超时报错** | 正常 |
 
 建议：
 
-- 同时用 VD 的话，把 `config.sh` 里 `DISABLE_VERIFIER` 改成 `0`，只靠属性放行；若 VRChat 仍进不去 VR 再改回 `1`。
-- v1.2 起自带 `uninstall.sh`，卸载会自动 `pm enable` 回来 —— 用旧版本卸载过的话，手动执行一次：`pm enable com.pvr.verify`。
+- **保持默认 `DISABLE_VERIFIER=0`。** 只有当日志明确显示 VRChat 因校验器拦截而进不去 VR 时，才临时改成 `1` 排查。
+- 曾用 `1` 跑过的话，改回 `0` 并重启即可恢复；`uninstall.sh` 也会在卸载时自动 `pm enable` 回来。用旧版本卸载过且 VD 异常的，手动执行一次：`pm enable com.pvr.verify` 后重启。
 
 ## License
 
