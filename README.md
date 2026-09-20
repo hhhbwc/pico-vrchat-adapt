@@ -126,31 +126,36 @@ VRChat（自带 libopenxr_loader.so）
 | `discover=` | `0` | `1` 时探测目标 profile 的完整组件字典并打日志（写 `map=` 规则用） |
 | `debug=` | `1` | 逐绑定探测结果日志 |
 
-## 可选：与一体机版 VRChat 共存
+## 结论：与一体机版共存 —— 改包名路线**不可行**
 
-一体机版 VRChat 与 Steam Frame 版**包名相同**（都是 `com.vrchat.android`），装一个会覆盖另一个。想让两版共存：**一体机版保持原样不动，把 Steam Frame 版改名重签**即可（反方向同理）。
+一体机版与 Steam Frame 版**包名相同**（都是 `com.vrchat.android`），装一个覆盖另一个。直觉解法是「给其中一个改包名」，但这条路已被实测堵死：**VRChat 官方包自带防篡改校验**。
 
-原理：改 APK 的 `AndroidManifest.xml` 里 `package` 属性 + 两处包名绑定数据（androidx-startup 的 `authorities`、自定义权限 `deveventspermission` 声明与使用）。注意：
+### 现象
 
-- 组件类名**不能跟着改**（类还在原包名的 dex 里），全限定名一律保持 `com.vrchat.android.*`；
-- `<queries>` 里的 `org.khronos.openxr.runtime_broker` 等权威是 OpenXR 运行时发现用的系统标准名，**不要动**；
-- 若 manifest 存在相对组件名（`android:name=".XXX"`），必须展开为原包名全限定名。
+改名重签后安装成功、能启动，但永远进不去游戏 —— 进程活着、CPU 归零、无任何崩溃弹窗：
 
-手动步骤（apktool ≥ 2.9 + 任意 APK 签名工具，如 uber-apk-signer）：
-
-```bash
-apktool d -s vrchat_steamframe.apk -o work/          # -s 保留 dex 原样
-#   编辑 work/AndroidManifest.xml：package 改为 com.vrchat.steamframe，
-#   authorities 改 com.vrchat.steamframe.androidx-startup，
-#   两处 com.vrchat.android.deveventspermission 改新包名前缀
-apktool b work/ -o mirror_unsigned.apk
-#   zipalign + 签名（任何自选密钥均可，仅自用）
-adb install mirror_signed.apk
+```
+I [CORE]  : server fused app token: 65b570d5-2be0-4ebd-8c96-b3a6bb3675d4
+E libsigchain: xr_default_handler signal: 11, signo: 11     # 打印 token 后 5~10ms 内 SIGSEGV
 ```
 
-共存后两版数据相互独立（独立 UID），各自登录。本仓库的 shim 与属性伪装按 profile token / 系统属性工作，**不依赖包名**，对改名后的包同样生效；`module-sideload/config.sh` 的 `PKGS` 已默认包含两个包名（权限授予用）。
+`[CORE]` 是 `libloader.so` 里的混淆加载器。正常启动时 token 会打印两次并继续进 Unity；被篡改时打印一次就被 `xr_default_handler` 吞掉信号，主线程假死（**不会生成 tombstone，进程还在** —— 只看 `pidof` 会误判成「启动成功」）。
 
-> ⚠️ 重签会破坏原签名，仅限自用互操作研究，请勿分发改签名后的安装包。
+### 已排除的三条路线
+
+| 尝试 | 结果 | 卡点 |
+|---|---|---|
+| apktool 改包名 + 重签 | ✗ 假死 | 校验锁定签名/包名身份 |
+| 同长度原地补丁（除包名字符串外与原包逐字节一致、dex 头校验和重算、仅重签） | ✗ 仍假死 | 同上：**不是内容完整性问题** |
+| Android 多用户（PICO 支持 4 用户） | ✗ `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 同名包跨用户要求签名一致 |
+
+关键事实：两版都是各自渠道的**官方原包**，签名证书不同（Steam Frame 版 = VRChat 官方密钥 `BC:97:61…`；一体机版 = 另一渠道密钥 `7E:E1:9F…`），`[CORE]` 各自校验自己渠道的证书 —— 所以**重签哪一版都必死**，改名却是重签的必经之路。
+
+### 如果仍要共存
+
+只剩「绕过 `[CORE]` 校验」：运行时 hook（Zygisk/LSPosed 在应用读取自身签名时伪造回原证书）或 native patch `libloader.so`。两者都要先用 frida 动态追踪定位校验点（`libloader.so` 字符串全混淆、且未链接 `libcrypto`，静态看不出来），且 VRChat 每次更新都要重做。**本项目不提供、也不鼓励这条路** —— 它超出了「不改 APK、不注入游戏进程」的原则。
+
+> 实践建议：二选一安装。本仓库的 shim 与属性伪装按 profile token / 系统属性工作，不依赖包名，对任一版都生效。
 
 ## 常见问题
 
