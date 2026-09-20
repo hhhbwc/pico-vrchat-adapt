@@ -172,7 +172,18 @@ VRChat 是 untrusted_app 域，SELinux 禁止它写 `/data/local/tmp/`。会话�
 与本项目无关，是网络问题（Photon UDP 被墙）。任何支持 hysteria2 的代理客户端 + 对应节点即可解决，不在本仓库范围内。
 
 **卸载 / 回滚？**
-Magisk → 模块 → 关闭或删除 → 重启。系统库立即恢复原状，无任何残留（无 APK 改动、无属性、无持久状态）。
+Magisk → 模块 → 移除 → 重启。systemless 挂载（`system/lib64/libopenxr_forwardloader.so`）与 `system.prop` 由 Magisk 自动回滚，`resetprop` 改的 `ro.*` 属性重启即恢复 —— 这些**无残留**。
+
+但 `module-sideload` 在运行期还会改几处**写在磁盘上、Magisk 不跟踪**的状态，靠模块自带的 `uninstall.sh` 回滚（2026-09-21 起提供；更早版本没有这个脚本，卸载后状态会残留）：
+
+| 改动 | 落盘位置 | 回滚方式 |
+|---|---|---|
+| `pm disable-user`（OTA / 校验器） | `package-restrictions.xml` | `pm enable <pkg>` |
+| `pm grant` | `runtime-permissions.xml` | `pm revoke <pkg> <perm>` |
+| `settings put`（`vr_display_mode` 等） | 设置数据库 | `settings delete global <key>` |
+| `persist.pvrpermission.autogrant` | `persistent_properties` | `resetprop --delete <key>` |
+
+> 想确认设备上还残留了什么：`adb shell pm list packages -d`（被禁用的包）、`adb shell settings list global | grep vr_`。
 
 **如果还是被签名校验拦？**
 `lsposed-hook/` 提供了 LSPosed 兜底方案（hook Pico 签名校验，对 VRChat 放行），见该目录 README。
