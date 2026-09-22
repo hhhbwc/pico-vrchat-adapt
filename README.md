@@ -51,7 +51,9 @@ adb shell chmod -R 755 /data/adb/modules/pico-vrchat-adapt
 adb reboot
 ```
 
-它做的事（开机早期 `resetprop`）：把 OS 版本属性伪装进 5.5 宽松区间、打开侧载候选开关、关闭严格签名校验候选开关；开机完成后给 VRChat 显式授权（含 `org.khronos.openxr.permission.OPENXR_SYSTEM`），可选冻结 OTA / 安全校验器。所有开关见模块内 `config.sh`。
+它做的事（开机早期 `resetprop`）：把 OS 版本属性伪装进 5.5 宽松区间、打开侧载候选开关、关闭严格签名校验候选开关；开机完成后给 VRChat 显式授权（含 `org.khronos.openxr.permission.OPENXR_SYSTEM`）。
+
+**会写持久状态的开关（`DISABLE_OTA` / `DISABLE_VERIFIER` / `FORCE_VR_DISPLAY` / `FORCE_RESIZABLE_ACTIVITIES`）默认全部关闭** —— 这类状态 Magisk 不回滚，残留会破坏系统启动（见「卡在开机 logo」一节）。需要时在模块内 `config.sh` 里显式打开，回滚逻辑见 `revert.sh`。
 
 ### 2. 模块二：手柄 profile 别名（xr-profile-alias）
 
@@ -174,16 +176,51 @@ VRChat 是 untrusted_app 域，SELinux 禁止它写 `/data/local/tmp/`。会话�
 **卸载 / 回滚？**
 Magisk → 模块 → 移除 → 重启。systemless 挂载（`system/lib64/libopenxr_forwardloader.so`）与 `system.prop` 由 Magisk 自动回滚，`resetprop` 改的 `ro.*` 属性重启即恢复 —— 这些**无残留**。
 
-但 `module-sideload` 在运行期还会改几处**写在磁盘上、Magisk 不跟踪**的状态，靠模块自带的 `uninstall.sh` 回滚（2026-09-21 起提供；更早版本没有这个脚本，卸载后状态会残留）：
+但 `module-sideload` 在运行期还会改几处**写在磁盘上、Magisk 不跟踪**的状态：
 
 | 改动 | 落盘位置 | 回滚方式 |
 |---|---|---|
 | `pm disable-user`（OTA / 校验器） | `package-restrictions.xml` | `pm enable <pkg>` |
 | `pm grant` | `runtime-permissions.xml` | `pm revoke <pkg> <perm>` |
-| `settings put`（`vr_display_mode` 等） | 设置数据库 | `settings delete global <key>` |
-| `persist.pvrpermission.autogrant` | `persistent_properties` | `resetprop --delete <key>` |
+| `settings put`（`vr_display_mode` 等） | 设置数据库 | `settings delete <key>` |
+| `persist.pvrpermission.autogrant` | `persistent_properties` | `setprop ... 0` |
 
-> 想确认设备上还残留了什么：`adb shell pm list packages -d`（被禁用的包）、`adb shell settings list global | grep vr_`。
+v1.4 起由 `revert.sh` 统一回滚（幂等、可重复执行），三条路径都走它：
+
+1. 卸载时系统已在运行 → `uninstall.sh` 直接调用
+2. 卸载发生在开机早期（Magisk 在 post-fs-data 阶段清算，此时 `pm`/`settings` 连不上 system_server）→ `uninstall.sh` 把 `revert.sh` 投放到 `/data/adb/service.d/zz-adapt-revert.sh`，Magisk 开机后补跑，跑完自删
+3. 手动救砖 → 见下一节
+
+> ⚠️ **v1.3 及更早版本有 bug**：`customize.sh` 漏给 `uninstall.sh` 设执行权限。Magisk 用 `execve` 调用卸载脚本，没有 x 位就完全没跑 —— 回滚从未生效。用旧版本卸载过的设备，请手动执行下面第 2 条。
+
+**卡在开机 logo 了怎么办（重要）**
+
+症状：装过 `module-sideload` 然后移除，重启后头显反复卡在 PICO 开机 logo，必须长按电源强制关机才停。
+
+根因：旧版回滚脚本没生效，残留的持久状态（`com.pvr.verify` 被禁用、`vr_display_mode=1`）破坏了系统自身的启动流程。**与 `xr-profile-alias` 无关** —— 它是纯 systemless，没有持久状态，卸载即还原。
+
+按顺序试：
+
+1. **进 Magisk 安全模式**：强制关机，开机时**一直按住音量下键**直到进入系统（core-only，自动跳过所有模块）。
+2. **手动回滚**（系统能起来时最直接）：
+   ```sh
+   adb push revert.sh /data/local/tmp/
+   adb shell su -c "sh /data/local/tmp/revert.sh"
+   adb reboot
+   ```
+   `revert.sh` 在仓库 `module-sideload/` 目录，每个 Release 的 zip 里也有。
+3. **只清可疑项**（不想跑脚本时）：
+   ```sh
+   adb shell su -c "pm enable com.pvr.verify; settings delete global vr_display_mode; settings delete secure vr_display_mode; settings delete global force_resizable_activities; setprop persist.pvrpermission.autogrant 0"
+   adb reboot
+   ```
+4. **确认已回到干净基线**：
+   ```sh
+   adb shell settings get global vr_display_mode   # 期望 null
+   adb shell settings get secure vr_display_mode   # 期望 null
+   adb shell pm list packages -d | grep -E "pvr.verify|pico.ota"   # 期望无输出
+   adb shell getprop persist.pvrpermission.autogrant              # 期望 0
+   ```
 
 **如果还是被签名校验拦？**
 `lsposed-hook/` 提供了 LSPosed 兜底方案（hook Pico 签名校验，对 VRChat 放行），见该目录 README。
@@ -205,8 +242,8 @@ Magisk → 模块 → 移除 → 重启。systemless 挂载（`system/lib64/libo
 | 校验器 | 放行属性 | Virtual Desktop | VRChat Steam Frame |
 |---|---|---|---|
 | 开 | 无 | 正常 | 进不了 VR（未装模块时的基线） |
-| 开 | 有（v1.2 默认） | 正常 | 正常 |
-| 关 | 有 | **超时报错** | 正常 |
+| 开 | 有（v1.3+ 默认） | 正常 | 正常 |
+| 关 | 有（v1.2 默认） | **超时报错** | 正常 |
 
 建议：
 

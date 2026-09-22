@@ -1,48 +1,52 @@
 #!/system/bin/sh
 # ============================================================
-#  uninstall.sh —— 模块被移除时由 Magisk 执行一次
+#  uninstall.sh —— 模块被 Magisk 移除时执行一次
 #
-#  Magisk 只会回滚它自己管理的东西：systemless 挂载（本模块没有）和
-#  system.prop。凡是我们脚本在运行时改掉的系统状态，Magisk 不跟踪，
-#  必须在这里显式回滚，否则删掉模块后状态依旧残留：
+#  真正的回滚逻辑在 revert.sh（幂等，也可手动执行）。这里只做派发，
+#  因为 Magisk 调用本脚本的时机不确定：
 #
-#    pm disable-user  -> /data/system/users/0/package-restrictions.xml
-#    pm grant         -> /data/system/users/0/runtime-permissions.xml
-#    settings put     -> 设置数据库（/data/system/users/0/settings_*.xml）
-#    persist.*        -> /data/property/persistent_properties
+#    * 系统已经起来（magisk --remove-modules，或 App 里移除后系统在跑）
+#      -> pm / settings 可用，直接执行 revert.sh
+#    * post-fs-data 阶段（App 里标记移除后重启，Magisk 在开机早期清算）
+#      -> system_server 还没起来，pm / settings 连不上，此刻直接回滚
+#         必然全部失败。把 revert.sh 投放到 /data/adb/service.d/，
+#         Magisk 会在系统启动完成后补跑一次。
 #
-#  resetprop 改的 ro.* 属性是运行时的，重启自动恢复，无需处理。
+#  两个坑（都真踩过）：
+#    1. 日志不能写 /sdcard —— post-fs-data 阶段 /sdcard 尚未挂载，
+#       写进去的日志会静默丢失，事后无从排查。
+#    2. 本脚本必须带可执行位。旧版 customize.sh 漏了设权限，
+#       Magisk 用 execve 直接执行，没有 x 位就完全没跑 ——
+#       这正是一次「卸载后卡在开机 logo」事故的根因。
 # ============================================================
 MODDIR=${0%/*}
-LOG=/sdcard/AdaptModule.log
-[ -f "$MODDIR/config.sh" ] && . "$MODDIR/config.sh"
+REVERT="$MODDIR/revert.sh"
+FALLBACK=/data/adb/service.d/zz-adapt-revert.sh
+LOG=/data/local/tmp/adapt-uninstall.log
 
-log() { echo "[adapt:uninstall] $*" >> "${LOG:-/sdcard/AdaptModule.log}" 2>/dev/null; }
-log "=== revert @ $(date) ==="
+log() { echo "[adapt:uninstall] $*" >> "$LOG" 2>/dev/null; }
+log "=== uninstall @ $(date) ==="
 
-# ---- 1) 重新启用我们可能禁用的包 ----
-# 注意：如果你在装模块之前就自行禁用过其中某个包，这里也会把它启用回来。
-for p in com.pico.ota com.pico.ota.sys com.pico.otacenter \
-         com.pvr.verify com.pico.security.verifier com.pico.security; do
-  pm enable "$p" >/dev/null 2>&1 && log "enabled $p"
-done
+if [ ! -f "$REVERT" ]; then
+    log "ERROR: $REVERT missing, cannot revert persistent state"
+    exit 1
+fi
 
-# ---- 2) 撤掉我们写入的设置项 ----
-settings delete global vr_display_mode >/dev/null 2>&1 && log "deleted global vr_display_mode"
-settings delete secure vr_display_mode >/dev/null 2>&1 && log "deleted secure vr_display_mode"
-settings delete global force_resizable_activities >/dev/null 2>&1 && log "deleted global force_resizable_activities"
+if [ "$(getprop sys.boot_completed)" = "1" ]; then
+    log "boot completed -> reverting inline via revert.sh"
+    sh "$REVERT" >> "$LOG" 2>&1
+    log "inline revert finished, rc=$?"
+else
+    log "boot not completed -> system_server unreachable, deploying fallback"
+    mkdir -p /data/adb/service.d 2>/dev/null
+    if cp "$REVERT" "$FALLBACK" 2>/dev/null; then
+        chmod 755 "$FALLBACK" 2>/dev/null
+        log "deployed $FALLBACK (will run after boot, then self-delete)"
+    else
+        log "ERROR: failed to deploy $FALLBACK -- revert manually:"
+        log "       adb shell su -c 'sh /data/local/tmp/revert.sh'"
+    fi
+fi
 
-# ---- 3) 删掉我们写入的 persist 属性 ----
-resetprop --delete persist.pvrpermission.autogrant >/dev/null 2>&1 && log "deleted persist.pvrpermission.autogrant"
-
-# ---- 4) 撤销我们授予的运行时权限（normal 权限无法撤销，忽略即可）----
-for PKG in ${PKGS:-com.vrchat.android}; do
-  for perm in android.permission.RECORD_AUDIO \
-              android.permission.READ_EXTERNAL_STORAGE \
-              android.permission.WRITE_EXTERNAL_STORAGE; do
-    pm revoke "$PKG" "$perm" >/dev/null 2>&1 && log "revoked $PKG $perm"
-  done
-done
-
-log "=== revert done ==="
+log "=== uninstall done ==="
 exit 0

@@ -35,10 +35,17 @@ for perm in $PERMS; do
   done
 done
 
-# ---- 2) 让未知来源应用也能作为 VR 应用被识别（best-effort）----
-settings put global vr_display_mode 1 >/dev/null 2>&1
-settings put secure vr_display_mode 1 >/dev/null 2>&1
-settings put global force_resizable_activities 1 >/dev/null 2>&1
+# ---- 2) 可选：遗留全局设置（默认关闭，见 config.sh 的风险说明）----
+# 这两项是持久状态，Magisk 不回滚，残留会影响系统启动 —— 只在明确需要时开。
+if [ "$FORCE_VR_DISPLAY" = "1" ]; then
+  settings put global vr_display_mode 1 >/dev/null 2>&1
+  settings put secure vr_display_mode 1 >/dev/null 2>&1
+  log "LEGACY: set vr_display_mode=1 (persistent, risky)"
+fi
+if [ "$FORCE_RESIZABLE_ACTIVITIES" = "1" ]; then
+  settings put global force_resizable_activities 1 >/dev/null 2>&1
+  log "LEGACY: set force_resizable_activities=1 (persistent)"
+fi
 
 # ---- 3) 可选：禁用 OTA 更新（防止夜间自动升级回更封闭版本）----
 if [ "$DISABLE_OTA" = "1" ]; then

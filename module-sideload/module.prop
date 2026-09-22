@@ -1,6 +1,6 @@
 id=pico-vrchat-adapt
 name=Pico VRChat (Steam Frame) sideload helper
-version=1.3
-versionCode=4
+version=1.4
+versionCode=5
 author=wzy
-description=Lets the sideloaded Steam Frame build of VRChat (com.vrchat.android) launch and enter VR on rooted PICO 4 (tested on OS 5.13.7): spoofs PICO OS version props into the permissive 5.5 range, flips sideload/signature candidate switches, grants OpenXR system permissions, and optionally freezes OTA. The security verifier is left enabled by default (DISABLE_VERIFIER=0) because Virtual Desktop needs it running. Pair with the xr-profile-alias module for controller support. Requires Magisk + root.
+description=Lets the sideloaded Steam Frame build of VRChat (com.vrchat.android) launch and enter VR on rooted PICO 4 (tested on OS 5.13.7): spoofs PICO OS version props into the permissive 5.5 range, flips sideload/signature candidate switches and grants OpenXR system permissions. All system-wide settings that could break boot (vr_display_mode, verifier disabling) are off by default; revert.sh and uninstall.sh roll back every persistent change. Pair with the xr-profile-alias module for controller support. Requires Magisk + root.
